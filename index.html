@@ -70,10 +70,10 @@
     <option value="other">other</option>
   </select>
   <select id="sort">
+    <option value="lastSeen">sort: last seen</option>
     <option value="runs">sort: persistence</option>
     <option value="followers">sort: followers</option>
     <option value="maxViewers">sort: max viewers</option>
-    <option value="lastSeen">sort: last seen</option>
   </select>
   <label><input type="checkbox" id="verified"> verified league only</label>
   <label><input type="checkbox" id="us"> US signal only</label>
@@ -152,7 +152,8 @@ function render() {
     : (b[sort] ?? 0) - (a[sort] ?? 0));
   $('grid').innerHTML = list.map(card).join('');
   $('empty').hidden = list.length > 0;
-  $('meta').textContent = `${list.length} of ${DATA.count} pool creators · data ${DATA.generatedAt?.slice(0, 16).replace('T', ' ')} UTC`;
+  const genAt = DATA.generatedAt ? new Date(DATA.generatedAt).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'numeric', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '—';
+  $('meta').textContent = `${list.length} of ${DATA.count} pool creators · most recently collected ${genAt} EST`;
 }
 
 fetch('./dashboard.json')
