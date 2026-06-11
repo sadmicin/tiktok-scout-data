@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>TikTok LIVE Scout</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #181c23; --panel2: #1f242e; --text: #e8eaf0;
+    --dim: #8b93a3; --accent: #4da3ff; --ok: #3ecf8e; --warn: #f0b429; --bad: #f4604c;
+    --chip: #262c38;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 16px 20px 10px; display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; }
+  header h1 { font-size: 18px; margin: 0; }
+  header .meta { color: var(--dim); font-size: 12px; }
+  #controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 20px 14px; align-items: center; }
+  #controls select, #controls input[type=search] {
+    background: var(--panel2); color: var(--text); border: 1px solid #2c3340;
+    border-radius: 6px; padding: 6px 8px; font-size: 13px;
+  }
+  #controls label { color: var(--dim); font-size: 12px; display: flex; gap: 5px; align-items: center;
+    background: var(--panel2); border: 1px solid #2c3340; border-radius: 6px; padding: 6px 8px; cursor: pointer; }
+  #grid { display: grid; gap: 14px; padding: 0 20px 40px;
+          grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid #232a35; border-radius: 10px; overflow: hidden; }
+  .snap { width: 100%; aspect-ratio: 16/10; object-fit: cover; display: block; background: #0a0c10; }
+  .body { padding: 10px 12px 12px; }
+  .who { display: flex; gap: 9px; align-items: center; margin-bottom: 6px; }
+  .who img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: var(--chip); }
+  .who .names { min-width: 0; }
+  .who .nick { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .who a { color: var(--accent); text-decoration: none; font-size: 12px; }
+  .badge { margin-left: auto; font-weight: 700; font-size: 13px; padding: 3px 8px; border-radius: 6px;
+           background: var(--chip); }
+  .badge.v { color: var(--ok); } .badge.a { color: var(--warn); }
+  .stats { display: flex; gap: 12px; color: var(--dim); font-size: 12px; margin: 4px 0 7px; flex-wrap: wrap; }
+  .stats b { color: var(--text); font-weight: 600; }
+  .sched { display: flex; gap: 1px; height: 18px; align-items: flex-end; margin: 2px 0 8px; }
+  .sched div { flex: 1; background: var(--accent); opacity: .85; border-radius: 1px; min-height: 1px; }
+  .sched div.z { background: #2a313d; }
+  .bio { color: var(--dim); font-size: 12px; max-height: 3.6em; overflow: hidden; margin-bottom: 7px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip { background: var(--chip); border-radius: 5px; padding: 2px 7px; font-size: 11px; color: var(--dim); }
+  .chip.us { color: var(--ok); } .chip.agency, .chip.foreign { color: var(--bad); }
+  .chip.avail { color: var(--ok); } .chip.network { color: var(--bad); } .chip.other { color: var(--warn); }
+  #empty { color: var(--dim); padding: 30px 20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TikTok LIVE Scout</h1>
+  <span class="meta" id="meta">loading…</span>
+</header>
+<div id="controls">
+  <input type="search" id="q" placeholder="search name / bio">
+  <select id="tier">
+    <option value="">C + D leagues</option>
+    <option value="C">C only</option>
+    <option value="D">D only</option>
+  </select>
+  <select id="status">
+    <option value="">any backstage status</option>
+    <option value="unchecked">unchecked</option>
+    <option value="available">available</option>
+    <option value="in_network">in network</option>
+    <option value="other">other</option>
+  </select>
+  <select id="sort">
+    <option value="runs">sort: persistence</option>
+    <option value="followers">sort: followers</option>
+    <option value="maxViewers">sort: max viewers</option>
+    <option value="lastSeen">sort: last seen</option>
+  </select>
+  <label><input type="checkbox" id="verified"> verified league only</label>
+  <label><input type="checkbox" id="us"> US signal only</label>
+  <label><input type="checkbox" id="noagency" checked> hide agency-hinted</label>
+  <label><input type="checkbox" id="noforeign" checked> hide foreign-hinted</label>
+</div>
+<div id="grid"></div>
+<div id="empty" hidden>No creators match the current filters.</div>
+<script>
+let DATA = { creators: [] };
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n ?? 0);
+
+// hoursUtc is a UTC histogram — rotate to the viewer's timezone.
+function schedule(hours) {
+  if (!hours || !hours.some((n) => n > 0)) return '';
+  const shift = -new Date().getTimezoneOffset() / 60;
+  const local = hours.map((_, h) => hours[((h - shift) % 24 + 24) % 24 | 0] ?? 0);
+  const max = Math.max(...local);
+  return '<div class="sched" title="sightings by local hour (midnight→11pm)">' +
+    local.map((n) => `<div class="${n ? '' : 'z'}" style="height:${n ? Math.max(15, n / max * 100) : 6}%"></div>`).join('') +
+    '</div>';
+}
+
+function card(c) {
+  const badge = `<span class="badge ${c.leagueVerified ? 'v' : 'a'}" title="${c.leagueVerified ? 'verified in battle' : 'estimated from stats'}">${esc(c.league)}${c.leagueVerified ? ' ✓' : ' ~'}</span>`;
+  const chips = [];
+  if (c.usHint) chips.push(`<span class="chip us">US: ${esc(c.usHint)}</span>`);
+  if (c.nonUsHint) chips.push(`<span class="chip foreign">non-US: ${esc(c.nonUsHint)}</span>`);
+  if (c.agencyHint) chips.push(`<span class="chip agency">agency: ${esc(c.agencyHint)}</span>`);
+  if (c.status) chips.push(`<span class="chip ${c.status === 'available' ? 'avail' : c.status === 'in_network' ? 'network' : 'other'}">backstage: ${esc(c.status.replace('_', ' '))}</span>`);
+  if (c.category) chips.push(`<span class="chip">${esc(c.category)}</span>`);
+  return `<div class="card">
+    ${c.snapshot ? `<a href="${esc(c.liveUrl)}" target="_blank" rel="noopener"><img class="snap" loading="lazy" src="${esc(c.snapshot)}" onerror="this.remove()" title="${c.snapshotType === 'frame' ? 'live stream frame' : 'room cover'}"></a>` : ''}
+    <div class="body">
+      <div class="who">
+        ${c.avatar ? `<img loading="lazy" src="${esc(c.avatar)}" onerror="this.remove()">` : ''}
+        <div class="names">
+          <div class="nick">${esc(c.nickname || c.username)}</div>
+          <a href="${esc(c.liveUrl)}" target="_blank" rel="noopener">@${esc(c.username)}</a>
+        </div>
+        ${badge}
+      </div>
+      <div class="stats">
+        <span><b>${fmt(c.followers)}</b> followers</span>
+        <span><b>${fmt(c.maxViewers)}</b> peak viewers</span>
+        <span><b>${c.runs}</b> sightings</span>
+        ${c.battleSightings ? `<span><b>${c.battleSightings}</b> battles</span>` : ''}
+      </div>
+      ${schedule(c.hoursUtc)}
+      ${c.bio ? `<div class="bio">${esc(c.bio)}</div>` : ''}
+      <div class="chips">${chips.join('')}</div>
+    </div>
+  </div>`;
+}
+
+function render() {
+  const q = $('q').value.toLowerCase();
+  const tier = $('tier').value;
+  const status = $('status').value;
+  const sort = $('sort').value;
+  let list = DATA.creators.filter((c) =>
+    (!tier || c.league[0] === tier) &&
+    (!$('verified').checked || c.leagueVerified) &&
+    (!$('us').checked || c.usHint) &&
+    (!$('noagency').checked || !c.agencyHint) &&
+    (!$('noforeign').checked || !c.nonUsHint) &&
+    (!status || (status === 'unchecked' ? !c.status : c.status === status)) &&
+    (!q || (c.username + ' ' + (c.nickname ?? '') + ' ' + (c.bio ?? '')).toLowerCase().includes(q))
+  );
+  list.sort((a, b) => sort === 'lastSeen'
+    ? String(b.lastSeen).localeCompare(String(a.lastSeen))
+    : (b[sort] ?? 0) - (a[sort] ?? 0));
+  $('grid').innerHTML = list.map(card).join('');
+  $('empty').hidden = list.length > 0;
+  $('meta').textContent = `${list.length} of ${DATA.count} pool creators · data ${DATA.generatedAt?.slice(0, 16).replace('T', ' ')} UTC`;
+}
+
+fetch('./dashboard.json')
+  .then((r) => r.json())
+  .then((d) => { DATA = d; render(); })
+  .catch(() => { $('meta').textContent = 'failed to load dashboard.json'; });
+for (const el of document.querySelectorAll('#controls select, #controls input')) {
+  el.addEventListener('input', render);
+}
+</script>
+</body>
+</html>
