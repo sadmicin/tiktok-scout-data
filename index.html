@@ -107,7 +107,7 @@ function schedule(hours) {
 }
 
 function card(c) {
-  const badge = `<span class="badge ${c.leagueVerified ? 'v' : 'a'}" title="${c.leagueVerified ? 'verified in battle' : 'estimated from stats'}">${esc(c.league)}${c.leagueVerified ? ' ✓' : ' ~'}</span>`;
+  const badge = `<span class="badge ${c.leagueVerified ? 'v' : 'a'}" title="${c.leagueVerified ? 'verified by TikTok API' : 'estimated from follower/viewer stats'}">${esc(c.league)}${c.leagueVerified ? ' ✓' : ' ~'}</span>`;
   const chips = [];
   if (c.usHint) chips.push(`<span class="chip us">US: ${esc(c.usHint)}</span>`);
   if (c.nonUsHint) chips.push(`<span class="chip foreign">non-US: ${esc(c.nonUsHint)}</span>`);
