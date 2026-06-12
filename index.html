@@ -88,6 +88,12 @@ let DATA = { creators: [] };
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n ?? 0);
+const fmtSeen = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleString('en-US', { timeZone: 'America/New_York', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) + ' EST';
+};
 
 // hoursUtc is a UTC histogram — rotate to the viewer's timezone.
 function schedule(hours) {
@@ -124,6 +130,7 @@ function card(c) {
         <span><b>${fmt(c.maxViewers)}</b> peak viewers</span>
         <span><b>${c.runs}</b> sightings</span>
         ${c.battleSightings ? `<span><b>${c.battleSightings}</b> battles</span>` : ''}
+        ${c.lastSeen ? `<span>last seen <b>${fmtSeen(c.lastSeen)}</b></span>` : ''}
       </div>
       ${schedule(c.hoursUtc)}
       ${c.bio ? `<div class="bio">${esc(c.bio)}</div>` : ''}
